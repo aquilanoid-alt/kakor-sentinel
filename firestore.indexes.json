@@ -1,0 +1,33 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "distribution_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "stock_batches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "expiryDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "location",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

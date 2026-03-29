@@ -1,0 +1,3 @@
+genericName,therapeuticClass,dosageForm,strength,restriction,facilityLevel,cluster,isPriority,coverageScheme,referencePrice,referencePriceSource,referencePriceUpdatedAt
+Paracetamol,Analgesik-antipiretik,Tablet,500 mg,Sesuai indikasi demam/nyeri ringan-sedang,FKTP; FKRTL,"Dewasa & Lansia; Ibu & Anak; UGD; Farmasi",true,JKN,350,KMK HK.01.07/MENKES/730/2025 atau kontrak aktif,2025-07-14
+Amoksisilin,Antibiotik beta-laktam,Kapsul,500 mg,Antibiotik rasional sesuai diagnosis dan panduan,FKTP; FKRTL,"Penyakit Menular; Dewasa & Lansia; Farmasi",true,JKN,700,KMK HK.01.07/MENKES/730/2025 atau kontrak aktif,2025-07-14
