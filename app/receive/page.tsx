@@ -52,7 +52,7 @@ export default async function ReceivePage() {
       <ReceiveForm
         catalog={catalog}
         stockBatches={stockBatches}
-        facilityKey={user.facilityId || user.facilityName || user.uid}
+        facilityKey={user.facilityId:"puskesmas-kakor" || user.facilityName: "Puskesmas Kakor" || user.uid:"userkakor1"}
       />
       <ReceiptReviewPanel receipts={receipts.slice(0, 4)} />
 
