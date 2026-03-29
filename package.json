@@ -1,0 +1,35 @@
+{
+  "name": "kakor-sentinel-supply",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "user:create": "node --env-file=.env.local scripts/manage-user.mjs create-user",
+    "user:password": "node --env-file=.env.local scripts/manage-user.mjs set-password"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "firebase": "latest",
+    "firebase-admin": "latest",
+    "next": "latest",
+    "pdf-lib": "latest",
+    "qrcode": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "xlsx": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/qrcode": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest"
+  }
+}
