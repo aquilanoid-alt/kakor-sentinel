@@ -14,7 +14,7 @@ export default async function InitialStockPage() {
       subtitle="Input cepat stok awal pilot dari Dinkes / IFK dengan banyak baris obat dalam satu dokumen."
       user={user}
     >
-      <InitialStockWizard catalog={catalog} />
+      <InitialStockWizard catalog={catalog} facilityKey="puskesmas-kakor" />
 
       <SectionCard
         eyebrow="Cara pakai"
