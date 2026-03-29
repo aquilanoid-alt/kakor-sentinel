@@ -1,0 +1,81 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isRole(role) {
+      return signedIn() && request.auth.token.role == role;
+    }
+
+    function isPharmacyCore() {
+      return signedIn() &&
+        (request.auth.token.role == "Admin (Apoteker)" ||
+         request.auth.token.role == "Petugas Farmasi");
+    }
+
+    function isOperational() {
+      return signedIn() &&
+        (request.auth.token.role == "Admin (Apoteker)" ||
+         request.auth.token.role == "Petugas Farmasi" ||
+         request.auth.token.role == "Petugas Jaringan" ||
+         request.auth.token.role == "Petugas Unit");
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow write: if isRole("Admin (Apoteker)");
+    }
+
+    match /fornas_catalog/{docId} {
+      allow read: if isOperational();
+      allow write: if isRole("Admin (Apoteker)");
+    }
+
+    match /stock_batches/{docId} {
+      allow read: if isOperational();
+      allow write: if isPharmacyCore();
+    }
+
+    match /distribution_requests/{docId} {
+      allow read: if isOperational();
+      allow create: if signedIn();
+      allow update, delete: if isPharmacyCore();
+    }
+
+    match /dispense_transactions/{docId} {
+      allow read: if isOperational();
+      allow create: if isOperational();
+      allow update, delete: if isPharmacyCore();
+    }
+
+    match /receipts/{docId} {
+      allow read: if isOperational();
+      allow create, update: if isPharmacyCore();
+    }
+
+    match /stock_opnames/{docId} {
+      allow read: if isOperational();
+      allow create, update: if isPharmacyCore();
+    }
+
+    match /alerts/{docId} {
+      allow read: if isOperational();
+      allow write: if isPharmacyCore();
+    }
+
+    match /audit_events/{docId} {
+      allow read: if isOperational();
+      allow create: if isOperational();
+      allow update, delete: if false;
+    }
+
+    match /guide_sections/{docId} {
+      allow read: if isOperational();
+      allow write: if isRole("Admin (Apoteker)");
+    }
+  }
+}
+
