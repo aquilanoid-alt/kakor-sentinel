@@ -44,23 +44,53 @@ export function AppShell({
     facilityId: "",
     facilityName: ""
   };
-  const navigationItems =
-    user && activeUser.role === "Admin (Apoteker)"
-      ? [
-          ...navigation,
-          { href: "/admin/users", label: "Admin User", icon: "users" },
-          { href: "/admin/fornas", label: "Admin FORNAS", icon: "library" },
-          { href: "/admin/reference-prices", label: "Harga Referensi", icon: "pricing" },
-          { href: "/admin/go-live", label: "Go-Live", icon: "overview" }
-        ]
-      : user && activeUser.role === "Petugas Farmasi"
-        ? [
-            ...navigation,
-            { href: "/admin/fornas", label: "Admin FORNAS", icon: "library" },
-            { href: "/admin/reference-prices", label: "Harga Referensi", icon: "pricing" }
-          ]
-        : navigation;
+const role = activeUser?.role || "Guest";
+console.log("ACTIVE USER:", activeUser);
+console.log("ROLE TERBACA:", role);
 
+const navigationItems =
+  role === "Admin (Apoteker)"
+    ? [
+        { href: "/", label: "Overview", icon: "overview" },
+        { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+        { href: "/scan", label: "Scan", icon: "scan" },
+        { href: "/receive", label: "Penerimaan", icon: "receive" },
+        { href: "/distribution", label: "Distribusi", icon: "distribution" },
+        { href: "/stock", label: "Stok", icon: "stock" },
+        { href: "/reports", label: "Laporan", icon: "reports" },
+
+        { href: "/admin/users", label: "Admin User", icon: "users" },
+        { href: "/admin/fornas", label: "Admin FORNAS", icon: "library" },
+        { href: "/admin/reference-prices", label: "Harga Referensi", icon: "pricing" },
+        { href: "/admin/go-live", label: "Go-Live", icon: "overview" }
+      ]
+
+  : role === "Petugas Farmasi"
+    ? [
+        { href: "/", label: "Overview", icon: "overview" },
+        { href: "/scan", label: "Scan", icon: "scan" },
+        { href: "/receive", label: "Penerimaan", icon: "receive" },
+        { href: "/distribution", label: "Distribusi", icon: "distribution" },
+        { href: "/stock", label: "Stok", icon: "stock" },
+        { href: "/reports", label: "Laporan", icon: "reports" }
+      ]
+
+  : role === "Petugas Jaringan"
+    ? [
+        { href: "/", label: "Overview", icon: "overview" },
+        { href: "/distribution", label: "Distribusi", icon: "distribution" },
+        { href: "/reports", label: "Laporan", icon: "reports" }
+      ]
+
+  : role === "Petugas Unit"
+    ? [
+        { href: "/", label: "Overview", icon: "overview" },
+        { href: "/scan", label: "Scan", icon: "scan" }
+      ]
+
+  : [
+        { href: "/", label: "Overview", icon: "overview" }
+    ];
   return (
     <div className="min-h-screen bg-mesh">
       <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8">
