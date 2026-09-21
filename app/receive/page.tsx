@@ -54,7 +54,11 @@ export default async function ReceivePage() {
         stockBatches={stockBatches}
         facilityKey={user.facilityId || user.facilityName || user.uid || "puskesmas-kakor"}
       />
-      <ReceiptReviewPanel receipts={receipts.slice(0, 4)} />
+            <ReceiptReviewPanel
+        receipts={receipts.slice(0, 4)}
+        catalog={catalog}
+        canVoid={user.role === "Admin (Apoteker)"}
+      />
 
       <SectionCard
         eyebrow="Checklist"

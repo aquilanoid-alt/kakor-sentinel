@@ -30,7 +30,8 @@ export type WorkflowStage =
   | "received"
   | "variance"
   | "verified"
-  | "discrepancy-review";
+  | "discrepancy-review"
+  | "voided";
 
 export type MutationType = "dispense" | "receipt" | "distribution" | "stock-opname";
 
@@ -238,6 +239,9 @@ export interface ReceiptRecord {
   reviewedAt?: string;
   qrValue?: string;
   stockBatchId?: string;
+  voidedBy?: string;
+  voidedAt?: string;
+  voidReason?: string;
 }
 
 export interface DispenseRecord {

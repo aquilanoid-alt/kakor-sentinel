@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { GoLivePanel } from "@/components/admin/go-live-panel";
+import { OperationalResetPanel } from "@/components/admin/operational-reset-panel";
 import { PilotReadinessPanel } from "@/components/admin/pilot-readiness-panel";
 import { SectionCard } from "@/components/section-card";
 import { isFirebaseServerConfigured } from "@/lib/firebase/config";
@@ -40,6 +41,8 @@ export default async function GoLivePage() {
       />
 
       <PilotReadinessPanel summary={readiness} />
+
+      <OperationalResetPanel />
 
       <SectionCard
         eyebrow="Checklist produksi"

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { CoverageScheme, FornasDrug } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { getExpiryStatus } from "@/lib/visual-status";
 
 type WizardRow = {
   id: string;
@@ -18,16 +20,6 @@ type WizardRow = {
 };
 
 type ParsedCsvRow = Record<string, string>;
-const FAVORITE_EXPORT_FALLBACK_TERMS = [
-  "paracetamol",
-  "amoksisilin",
-  "oralit",
-  "amlodipin",
-  "metformin",
-  "salbutamol",
-  "omeprazol",
-  "zink"
-];
 
 function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -115,15 +107,6 @@ function normalizeSignature(...parts: string[]) {
   return parts.join("|").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function escapeCsvCell(value: string | number) {
-  const stringValue = String(value ?? "");
-  if (/[",\n]/.test(stringValue)) {
-    return `"${stringValue.replace(/"/g, '""')}"`;
-  }
-
-  return stringValue;
-}
-
 function createRow(defaultLocation: string): WizardRow {
   return {
     id: crypto.randomUUID(),
@@ -144,26 +127,29 @@ function buildDrugLabel(drug: FornasDrug) {
   return `${drug.genericName} • ${drug.dosageForm} ${drug.strength}`;
 }
 
-export function InitialStockWizard({
-  catalog,
-  facilityKey
-}: {
-  catalog: FornasDrug[];
-  facilityKey: string;
-}) {
+function buildSelectedDrugSummary(drug: FornasDrug | null, fallbackLabel: string) {
+  if (!drug && !fallbackLabel.trim()) {
+    return null;
+  }
+
+  return {
+    name: drug?.genericName ?? fallbackLabel,
+    dosage: drug ? `${drug.dosageForm} ${drug.strength}`.trim() : "Belum cocok dengan master FORNAS",
+    therapeuticClass: drug?.therapeuticClass ?? "Pilih dari daftar resmi agar identitas obat tersimpan",
+    facilityLevel: drug?.facilityLevel ?? "FORNAS belum terverifikasi"
+  };
+}
+
+export function InitialStockWizard({ catalog }: { catalog: FornasDrug[] }) {
   const [documentNumber, setDocumentNumber] = useState("");
   const [defaultLocation, setDefaultLocation] = useState("A1-R1-B1");
   const [rows, setRows] = useState<WizardRow[]>([createRow("A1-R1-B1")]);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [favoriteDrugIds, setFavoriteDrugIds] = useState<string[]>([]);
   const [message, setMessage] = useState(
     "Wizard ini dipakai untuk stok awal pilot: satu DO/faktur bisa langsung berisi banyak baris obat."
   );
-  const favoriteStorageKey = useMemo(
-    () => `kss-favorite-drugs:${facilityKey.trim() || "default-facility"}`,
-    [facilityKey]
-  );
+  const catalogReady = catalog.length > 0;
   const catalogById = useMemo(() => new Map(catalog.map((drug) => [drug.id, drug])), [catalog]);
   const catalogBySignature = useMemo(
     () =>
@@ -183,26 +169,6 @@ export function InitialStockWizard({
     });
     return map;
   }, [catalog]);
-  const favoriteDrugs = useMemo(
-    () =>
-      favoriteDrugIds
-        .map((id) => catalogById.get(id) ?? null)
-        .filter((drug): drug is FornasDrug => Boolean(drug)),
-    [catalogById, favoriteDrugIds]
-  );
-  const fallbackTemplateDrugs = useMemo(
-    () =>
-      FAVORITE_EXPORT_FALLBACK_TERMS.map((term) =>
-        catalog.find((drug) => normalizeSignature(drug.genericName).includes(term))
-      ).filter((drug): drug is FornasDrug => Boolean(drug)),
-    [catalog]
-  );
-  const exportTemplateDrugs = useMemo(
-    () =>
-      Array.from(new Map([...favoriteDrugs, ...fallbackTemplateDrugs].map((drug) => [drug.id, drug])).values()).slice(0, 12),
-    [fallbackTemplateDrugs, favoriteDrugs]
-  );
-
   const selectedIds = useMemo(() => new Set(rows.map((row) => row.drugId).filter(Boolean)), [rows]);
   const totals = useMemo(
     () => ({
@@ -216,22 +182,6 @@ export function InitialStockWizard({
   const updateRow = (rowId: string, patch: Partial<WizardRow>) => {
     setRows((current) => current.map((row) => (row.id === rowId ? { ...row, ...patch } : row)));
   };
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(favoriteStorageKey);
-      if (!stored) {
-        return;
-      }
-
-      const parsed = JSON.parse(stored) as unknown;
-      if (Array.isArray(parsed)) {
-        setFavoriteDrugIds(parsed.filter((value): value is string => typeof value === "string").slice(0, 20));
-      }
-    } catch {
-      setFavoriteDrugIds([]);
-    }
-  }, [favoriteStorageKey]);
 
   const addRow = () => {
     setRows((current) => [...current, createRow(defaultLocation)]);
@@ -360,29 +310,65 @@ export function InitialStockWizard({
   };
 
   const handleSaveAll = async () => {
+    if (!catalogReady) {
+      setMessage("Master FORNAS masih kosong. Buka Admin FORNAS, lakukan sinkron/import FORNAS resmi, lalu kembali ke Wizard Stok Awal.");
+      return;
+    }
+
     if (!documentNumber.trim()) {
       setMessage("Nomor DO/faktur wajib diisi.");
       return;
     }
 
-    const payloadRows = rows
-      .filter((row) => row.drugId && row.batch.trim() && row.expiryDate)
-      .map((row) => ({
-        drugId: row.drugId,
-        batch: row.batch.trim(),
-        expiryDate: row.expiryDate,
-        coverageScheme: row.coverageScheme || undefined,
-        quantityDocument: row.quantityDocument,
-        quantityPhysical: row.quantityPhysical,
-        unitPrice: row.unitPrice.trim() ? Number(row.unitPrice) : undefined,
-        priceSource: row.priceSource.trim(),
-        location: row.location.trim() || defaultLocation
-      }));
+    const activeRows = rows.filter(
+      (row) =>
+        row.drugId ||
+        row.query.trim() ||
+        row.batch.trim() ||
+        row.expiryDate ||
+        row.quantityDocument > 0 ||
+        row.quantityPhysical > 0 ||
+        row.coverageScheme
+    );
 
-    if (payloadRows.length === 0) {
-      setMessage("Isi minimal 1 baris obat lengkap sebelum menyimpan.");
+    if (activeRows.length === 0) {
+      setMessage("Isi minimal 1 baris stok awal sebelum menyimpan.");
       return;
     }
+
+    const incompleteRows = activeRows
+      .map((row, index) => ({ row, visibleIndex: rows.indexOf(row) + 1 || index + 1 }))
+      .filter(
+        ({ row }) =>
+          !row.drugId ||
+          !row.batch.trim() ||
+          !row.expiryDate ||
+          !row.coverageScheme ||
+          row.quantityDocument <= 0 ||
+          row.quantityPhysical < 0
+      );
+
+    if (incompleteRows.length > 0) {
+      setMessage(
+        `Lengkapi baris ${incompleteRows
+          .slice(0, 6)
+          .map((item) => item.visibleIndex)
+          .join(", ")}: pilih obat FORNAS, batch, ED, skema JKN/Reguler, qty dokumen > 0, dan qty fisik.`
+      );
+      return;
+    }
+
+    const payloadRows = activeRows.map((row) => ({
+      drugId: row.drugId,
+      batch: row.batch.trim(),
+      expiryDate: row.expiryDate,
+      coverageScheme: row.coverageScheme,
+      quantityDocument: row.quantityDocument,
+      quantityPhysical: row.quantityPhysical,
+      unitPrice: row.unitPrice.trim() ? Number(row.unitPrice) : undefined,
+      priceSource: row.priceSource.trim(),
+      location: row.location.trim() || defaultLocation
+    }));
 
     setSaving(true);
     setMessage("Menyimpan stok awal...");
@@ -428,63 +414,6 @@ export function InitialStockWizard({
     }
   };
 
-  const handleExportFavoriteTemplate = () => {
-    if (exportTemplateDrugs.length === 0) {
-      setMessage("Belum ada favorit fasilitas atau top picks yang bisa diekspor sebagai template.");
-      return;
-    }
-
-    const header = [
-      "documentNumber",
-      "drugId",
-      "genericName",
-      "dosageForm",
-      "strength",
-      "batch",
-      "expiryDate",
-      "quantityDocument",
-      "quantityPhysical",
-      "coverageScheme",
-      "unitPrice",
-      "priceSource",
-      "location"
-    ];
-
-    const documentValue = documentNumber.trim();
-    const rowsToExport = exportTemplateDrugs.map((drug) =>
-      [
-        documentValue,
-        drug.id,
-        drug.genericName,
-        drug.dosageForm,
-        drug.strength,
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        defaultLocation
-      ]
-        .map(escapeCsvCell)
-        .join(",")
-    );
-
-    const csv = [header.join(","), ...rowsToExport].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `template-stok-awal-${facilityKey || "fasilitas"}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-
-    setMessage(
-      `Template stok awal favorit berhasil diekspor untuk ${exportTemplateDrugs.length} obat. Lengkapi batch, ED, dan jumlah di file CSV sebelum diunggah kembali.`
-    );
-  };
-
   return (
     <div className="space-y-6">
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
@@ -512,6 +441,20 @@ export function InitialStockWizard({
           </div>
         </div>
       </div>
+
+      {!catalogReady ? (
+        <div className="surface-card rounded-[30px] border-amber-200/35 bg-amber-200/10 p-5">
+          <p className="text-xs uppercase tracking-[0.35em] text-amber-100">Master obat belum siap</p>
+          <h3 className="mt-2 font-heading text-2xl font-semibold text-white">Stok belum bisa disimpan sebelum FORNAS tersedia</h3>
+          <p className="mt-3 text-sm leading-7 text-mist/75">
+            Mode produksi tidak memakai data dummy. Sinkronkan atau import master FORNAS resmi terlebih dahulu supaya setiap
+            stok punya identitas obat yang valid dan bisa diaudit.
+          </p>
+          <a href="/admin/fornas" className="action-brand mt-5 inline-flex rounded-full px-5 py-3 text-sm font-semibold shadow-neon">
+            Buka Admin FORNAS
+          </a>
+        </div>
+      ) : null}
 
       <div className="surface-card rounded-[30px] p-5">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_0.9fr_0.7fr]">
@@ -557,13 +500,6 @@ export function InitialStockWizard({
           >
             Template CSV stok awal
           </a>
-          <button
-            type="button"
-            onClick={handleExportFavoriteTemplate}
-            className="action-ghost rounded-full px-5 py-3 text-sm font-medium text-white"
-          >
-            Export template favorit
-          </button>
         </div>
 
         <div className="mt-5 rounded-[24px] border border-white/10 bg-black/20 p-5">
@@ -594,6 +530,8 @@ export function InitialStockWizard({
         {rows.map((row, index) => {
           const normalizedQuery = row.query.trim().toLowerCase();
           const selectedDrug = catalog.find((item) => item.id === row.drugId) ?? null;
+          const selectedDrugSummary = buildSelectedDrugSummary(selectedDrug, row.query);
+          const expiry = getExpiryStatus(row.expiryDate);
           const suggestions = normalizedQuery.length < 2
             ? []
             : catalog
@@ -667,12 +605,43 @@ export function InitialStockWizard({
                   ) : null}
                 </div>
 
+                <div className="xl:col-span-4">
+                  <div
+                    className={`h-full rounded-[24px] border p-4 ${
+                      selectedDrugSummary
+                        ? "border-cyan/25 bg-cyan/10"
+                        : "border-dashed border-white/10 bg-white/5"
+                    }`}
+                  >
+                    <p className="text-xs uppercase tracking-[0.28em] text-aqua/75">Obat untuk batch ini</p>
+                    <p className="mt-2 text-lg font-semibold text-white">
+                      {selectedDrugSummary?.name ?? "Pilih obat dulu sebelum isi batch"}
+                    </p>
+                    <p className="mt-1 text-sm text-mist/72">
+                      {selectedDrugSummary
+                        ? selectedDrugSummary.dosage
+                        : "Nama obat akan tampil di sini supaya batch tidak tertukar."}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-mist/75">
+                        {selectedDrugSummary?.therapeuticClass ?? "Identitas belum dipilih"}
+                      </span>
+                      <span className="rounded-full border border-teal/20 bg-teal/10 px-3 py-1.5 text-xs text-aqua">
+                        {selectedDrugSummary?.facilityLevel ?? "Menunggu pilihan FORNAS"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 <label className="block">
-                  <span className="mb-2 block text-sm text-mist/75">Batch</span>
+                  <span className="mb-2 block text-sm text-mist/75">
+                    Batch {selectedDrug ? `untuk ${selectedDrug.genericName}` : ""}
+                  </span>
                   <input
                     value={row.batch}
                     onChange={(event) => updateRow(row.id, { batch: event.target.value })}
                     className="surface-input w-full rounded-2xl px-4 py-3 outline-none"
+                    placeholder={selectedDrug ? `Batch ${selectedDrug.genericName}` : "Nomor batch"}
                   />
                 </label>
                 <label className="block">
@@ -683,6 +652,17 @@ export function InitialStockWizard({
                     onChange={(event) => updateRow(row.id, { expiryDate: event.target.value })}
                     className="surface-input w-full rounded-2xl px-4 py-3 outline-none"
                   />
+                  {row.expiryDate ? (
+                    <div className={cn("mt-2 rounded-2xl border px-3 py-2 text-xs", expiry.cardClass)}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn("size-2 rounded-full", expiry.dotClass)} />
+                        <span className={cn("rounded-full border px-2.5 py-1 font-semibold", expiry.badgeClass)}>
+                          {expiry.label}
+                        </span>
+                        <span className="text-mist/70">{expiry.detail}</span>
+                      </div>
+                    </div>
+                  ) : null}
                 </label>
                 <label className="block">
                   <span className="mb-2 block text-sm text-mist/75">Qty dok</span>

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { DistributionRequest, FornasDrug } from "@/lib/types";
 import { submitOrQueueMutation } from "@/lib/offline";
-import { formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
+import { getUnitVisual } from "@/lib/visual-status";
 
 export function DistributionForm({
   catalog,
@@ -30,6 +31,7 @@ export function DistributionForm({
   );
 
   const filtered = requests.filter((item) => item.status === status || status === "all");
+  const activeUnitVisual = getUnitVisual(requestingUnit);
 
   const handleSubmit = async () => {
     const result = await submitOrQueueMutation("distribution", "/api/distributions", {
@@ -66,6 +68,19 @@ export function DistributionForm({
               className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-white outline-none"
             />
           </label>
+
+          <div className={cn("rounded-[22px] border p-4", activeUnitVisual.cardClass)}>
+            <div className="flex items-center gap-3">
+              <span className={cn("size-3 rounded-full", activeUnitVisual.dotClass)} />
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-mist/55">Identitas warna unit</p>
+                <p className="mt-1 font-semibold text-white">{activeUnitVisual.unitName}</p>
+              </div>
+              <span className={cn("ml-auto rounded-full border px-3 py-1 text-xs font-semibold", activeUnitVisual.badgeClass)}>
+                {activeUnitVisual.label}
+              </span>
+            </div>
+          </div>
 
           <label className="block">
             <span className="mb-2 block text-sm text-mist/75">Klaster ILP</span>
@@ -175,11 +190,20 @@ export function DistributionForm({
         </div>
 
         <div className="space-y-3">
-          {filtered.map((request) => (
-            <div key={request.id} className="rounded-[26px] border border-white/10 bg-black/20 p-4">
+          {filtered.map((request) => {
+            const unitVisual = getUnitVisual(request.requestingUnit);
+
+            return (
+            <div key={request.id} className={cn("rounded-[26px] border p-4", unitVisual.cardClass)}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="font-semibold text-white">{request.requestingUnit || "Belum diisi"}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("size-2.5 rounded-full", unitVisual.dotClass)} />
+                    <p className="font-semibold text-white">{request.requestingUnit || "Belum diisi"}</p>
+                    <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", unitVisual.badgeClass)}>
+                      {unitVisual.label}
+                    </span>
+                  </div>
                   <p className="mt-1 text-sm text-mist/60">
                     {[request.cluster, request.requestedBy].filter(Boolean).join(" • ")}
                   </p>
@@ -198,7 +222,8 @@ export function DistributionForm({
                 </div>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       </div>
     </div>

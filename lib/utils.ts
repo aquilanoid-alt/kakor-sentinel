@@ -5,14 +5,16 @@ export function cn(...values: Array<string | undefined | false | null>) {
 export function formatDate(dateString: string) {
   return new Intl.DateTimeFormat("id-ID", {
     dateStyle: "medium",
-    timeStyle: undefined
+    timeStyle: undefined,
+    timeZone: "Asia/Makassar"
   }).format(new Date(dateString));
 }
 
 export function formatDateTime(dateString: string) {
   return new Intl.DateTimeFormat("id-ID", {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: "Asia/Makassar"
   }).format(new Date(dateString));
 }
 

@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DistributionRequest } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { getExpiryStatus } from "@/lib/visual-status";
 
 export function DistributionWorkflowPanel({ request }: { request: DistributionRequest }) {
   const router = useRouter();
@@ -74,7 +76,30 @@ export function DistributionWorkflowPanel({ request }: { request: DistributionRe
 
       <div className="rounded-[24px] border border-cyan/20 bg-cyan/10 p-4">
         <p className="text-xs uppercase tracking-[0.35em] text-aqua/75">Alokasi FEFO</p>
-        <p className="mt-2 text-sm text-white">{allocationText}</p>
+        {request.allocations?.length ? (
+          <div className="mt-3 space-y-2">
+            {request.allocations.map((allocation) => {
+              const expiry = getExpiryStatus(allocation.expiryDate);
+
+              return (
+                <div key={allocation.batchId} className={cn("rounded-2xl border p-3", expiry.cardClass)}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("size-2.5 rounded-full", expiry.dotClass)} />
+                    <p className="font-semibold text-white">{allocation.batchCode}</p>
+                    <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", expiry.badgeClass)}>
+                      {expiry.label}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-mist/70">
+                    {allocation.quantity} unit • {allocation.location} • ED {allocation.expiryDate}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-white">{allocationText}</p>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

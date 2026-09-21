@@ -65,6 +65,16 @@ const DASHBOARD_REFRESH_MIN_INTERVAL_MS = 60_000;
 const DEFAULT_DRUG_PRICE_NOTE =
   "FORNAS aktif JKN mengacu KMK HK.01.07/MENKES/1199/2025 (berlaku 1 April 2026). Nilai klaim harga obat tertentu mengacu KMK HK.01.07/MENKES/730/2025; selain itu gunakan kontrak/e-katalog aktif.";
 const ALPHABET_INITIALS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const OPERATIONAL_RESET_COLLECTIONS = [
+  "stock_batches",
+  "receipts",
+  "distribution_requests",
+  "dispense_transactions",
+  "stock_opnames",
+  "alerts",
+  "audit_events",
+  "dashboard_summary"
+] as const satisfies CollectionName[];
 
 const collectionCache = new Map<CollectionName, { expiresAt: number; rows: unknown[] }>();
 let dashboardSummaryCache: { expiresAt: number; snapshot: DashboardSnapshot } | null = null;
@@ -360,6 +370,12 @@ function buildApprovalEntry(
   };
 }
 
+function ensureAdminActor(actor: SessionUser) {
+  if (actor.role !== "Admin (Apoteker)") {
+    throw new Error("Hanya Admin (Apoteker) yang boleh melakukan reset data operasional.");
+  }
+}
+
 function availableQuantity(batch: StockBatch) {
   return Math.max(batch.quantity - batch.reserved, 0);
 }
@@ -417,12 +433,12 @@ function withinPeriod(dateString: string, startDate?: string | null, endDate?: s
   return true;
 }
 
-function buildLowStockAlert(drugId: string, totalAvailable: number): AlertItem {
+function buildLowStockAlert(drugId: string, drugName: string, totalAvailable: number): AlertItem {
   return {
     id: `stock-low-${drugId}`,
     severity: totalAvailable <= LOW_STOCK_THRESHOLD / 2 ? "critical" : "warning",
-    title: `Stok menipis ${drugId}`,
-    detail: `Saldo tersedia ${totalAvailable} unit untuk ${drugId}. Segera evaluasi reorder atau redistribusi buffer.`,
+    title: `Stok menipis ${drugName}`,
+    detail: `Saldo tersedia ${totalAvailable} unit untuk ${drugName}. Segera evaluasi reorder atau redistribusi buffer.`,
     action: "Lakukan review pemakaian 7 hari, cek permintaan aktif, dan buat rencana suplai."
   };
 }
@@ -448,7 +464,10 @@ async function syncDrugStockAlert(drugId: string) {
     .reduce((sum, batch) => sum + availableQuantity(batch), 0);
 
   if (totalAvailable <= LOW_STOCK_THRESHOLD) {
-    await upsertOperationalAlert(buildLowStockAlert(drugId, totalAvailable));
+    const catalog = await getFornasCatalog();
+    const drug = catalog.find((item) => item.id === drugId);
+    const drugName = drug?.genericName ?? drugId;
+    await upsertOperationalAlert(buildLowStockAlert(drugId, drugName, totalAvailable));
     return;
   }
 
@@ -1274,6 +1293,60 @@ export async function reviewReceiptRecord(
 
   await createAuditEvent(actor, "Review penerimaan", "Penerimaan", id, "online");
   return next;
+} 
+export async function voidReceipt(
+  id: string,
+  input: { reason: string },
+  actor: SessionUser
+) {
+  if (actor.role !== "Admin (Apoteker)") {
+    throw new Error("Hanya Admin (Apoteker) yang bisa membatalkan penerimaan.");
+  }
+
+  const current = await getReceiptById(id);
+  if (!current) {
+    throw new Error("Data penerimaan tidak ditemukan.");
+  }
+
+  if (current.workflowStage === "voided") {
+    throw new Error("Penerimaan ini sudah dibatalkan sebelumnya.");
+  }
+
+  const trail = [
+    ...(current.reviewTrail ?? []),
+    buildApprovalEntry(actor, "voided" as WorkflowStage, input.reason)
+  ];
+
+  const next = await updateDocument<ReceiptRecord>("receipts", id, {
+    workflowStage: "voided",
+    voidedBy: actor.name,
+    voidedAt: new Date().toISOString(),
+    voidReason: input.reason,
+    reviewTrail: trail
+  });
+
+  if (current.stockBatchId) {
+    const batch = await getStockBatchById(current.stockBatchId);
+    if (batch) {
+      const correctedQuantity = Math.max(0, batch.quantity - current.quantityPhysical);
+      const updatedBatch = await updateDocument<StockBatch>("stock_batches", batch.id, {
+        quantity: correctedQuantity,
+        lastUpdated: new Date().toISOString()
+      });
+      await syncBatchExpiryAlert(updatedBatch);
+      await syncDrugStockAlert(updatedBatch.drugId);
+    }
+  }
+
+  await createAuditEvent(
+    actor,
+    `Pembatalan penerimaan: ${input.reason}`,
+    "Penerimaan",
+    id,
+    "online"
+  );
+
+  return next;
 }
 
 export async function createDistributionRequestRecord(
@@ -1568,6 +1641,42 @@ export async function createStockOpnameRecord(
   await syncDrugStockAlert(updatedBatch.drugId);
 
   return record;
+}
+
+export async function resetOperationalDrugData(actor: SessionUser) {
+  ensureAdminActor(actor);
+
+  const deleted: Partial<Record<(typeof OPERATIONAL_RESET_COLLECTIONS)[number], number>> = {};
+
+  for (const collectionName of OPERATIONAL_RESET_COLLECTIONS) {
+    const rows = await readStoredCollection<{ id: string }>(collectionName);
+    deleted[collectionName] = rows.length;
+    await deleteDocuments(
+      collectionName,
+      rows.map((row) => row.id)
+    );
+  }
+
+  invalidateDashboardSummaryCache();
+
+  await createAuditEvent(
+    actor,
+    "Reset data operasional obat",
+    "Admin",
+    "operational-drug-data",
+    "online"
+  );
+
+  return {
+    deleted,
+    preserved: [
+      "fornas_catalog",
+      "users",
+      "system_config",
+      "guide_sections"
+    ],
+    totalDeleted: Object.values(deleted).reduce((total, count) => total + (count ?? 0), 0)
+  };
 }
 
 export async function importFornasCatalog(

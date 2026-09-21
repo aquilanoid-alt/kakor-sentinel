@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FornasDrug, StockBatch } from "@/lib/types";
 import { submitOrQueueMutation } from "@/lib/offline";
 import { resolveMedicationScan } from "@/lib/scan-utils";
+import { cn } from "@/lib/utils";
+import { getExpiryStatus, getUnitVisual } from "@/lib/visual-status";
 
 declare global {
   interface Window {
@@ -34,6 +36,11 @@ export function MedScanPanel({
   const scanResolution = useMemo(
     () => resolveMedicationScan(scanResult, stockBatches),
     [scanResult, stockBatches]
+  );
+  const unitVisual = useMemo(() => getUnitVisual(unitName), [unitName]);
+  const scanExpiry = useMemo(
+    () => getExpiryStatus(scanResolution.expiryDate),
+    [scanResolution.expiryDate]
   );
 
   useEffect(() => {
@@ -172,6 +179,17 @@ export function MedScanPanel({
           <p className="mt-2 text-sm text-mist/70">{message}</p>
         </div>
 
+        <div className={cn("rounded-2xl border p-4 text-sm", unitVisual.cardClass)}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn("size-2.5 rounded-full", unitVisual.dotClass)} />
+            <p className="font-semibold text-white">{unitVisual.unitName}</p>
+            <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", unitVisual.badgeClass)}>
+              {unitVisual.label}
+            </span>
+          </div>
+          <p className="mt-2 text-mist/70">Warna ini menjadi identitas visual unit saat transaksi lapangan.</p>
+        </div>
+
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-mist/75">
           <p className="font-semibold text-white">Smart scan</p>
           <p className="mt-2">
@@ -218,11 +236,20 @@ export function MedScanPanel({
           </p>
           <p className="mt-2 text-aqua">{selectedDrug?.restriction}</p>
           {scanResolution.batch ? (
-            <p className="mt-3 text-mist/70">
-              Batch {scanResolution.batch}
-              {scanResolution.expiryDate ? ` • ED ${scanResolution.expiryDate}` : ""}
-              {scanResolution.location ? ` • ${scanResolution.location}` : ""}
-            </p>
+            <div className={cn("mt-3 rounded-2xl border p-3", scanExpiry.cardClass)}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={cn("size-2.5 rounded-full", scanExpiry.dotClass)} />
+                <p className="font-semibold text-white">Batch {scanResolution.batch}</p>
+                <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", scanExpiry.badgeClass)}>
+                  {scanExpiry.label}
+                </span>
+              </div>
+              <p className="mt-1 text-mist/70">
+                {scanResolution.expiryDate ? `ED ${scanResolution.expiryDate}` : "ED belum terbaca"}
+                {scanResolution.location ? ` • ${scanResolution.location}` : ""}
+              </p>
+              <p className="mt-1 text-xs text-mist/60">{scanExpiry.detail}</p>
+            </div>
           ) : null}
           {scanResolution.gtin ? <p className="mt-2 text-mist/60">GTIN {scanResolution.gtin}</p> : null}
         </div>

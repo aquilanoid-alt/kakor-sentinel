@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import type { StockBatch } from "@/lib/types";
 import { submitOrQueueMutation } from "@/lib/offline";
+import { cn } from "@/lib/utils";
+import { getExpiryStatus } from "@/lib/visual-status";
 
 export function StockOpnameForm({ batches }: { batches: StockBatch[] }) {
   const [batchId, setBatchId] = useState(batches[0]?.id ?? "");
@@ -15,6 +17,7 @@ export function StockOpnameForm({ batches }: { batches: StockBatch[] }) {
   );
 
   const variance = physical - (selected?.quantity ?? 0);
+  const expiry = getExpiryStatus(selected?.expiryDate);
 
   const handleSubmit = async () => {
     if (!selected) {
@@ -79,12 +82,19 @@ export function StockOpnameForm({ batches }: { batches: StockBatch[] }) {
       </div>
 
       <div className="space-y-4 rounded-[32px] border border-line bg-white/5 p-5 shadow-glow">
-        <div className="rounded-[28px] border border-cyan/20 bg-cyan/10 p-5">
+        <div className={cn("rounded-[28px] border p-5", expiry.cardClass)}>
           <p className="text-xs uppercase tracking-[0.35em] text-aqua/75">Sistem FEFO</p>
-          <p className="mt-2 font-heading text-2xl font-semibold text-white">{selected?.batch}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className={cn("size-2.5 rounded-full", expiry.dotClass)} />
+            <p className="font-heading text-2xl font-semibold text-white">{selected?.batch}</p>
+            <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", expiry.badgeClass)}>
+              {expiry.label}
+            </span>
+          </div>
           <p className="mt-2 text-mist/70">
             Lokasi {selected?.location} • ED {selected?.expiryDate}
           </p>
+          <p className="mt-1 text-xs font-medium text-mist/65">{expiry.detail}</p>
           <p className="mt-2 text-mist/70">
             Saldo sistem {selected?.quantity} • Reserved {selected?.reserved}
           </p>

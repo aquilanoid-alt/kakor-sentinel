@@ -5,7 +5,8 @@ import { DistributionWorkflowPanel } from "@/components/distribution-workflow-pa
 import { SectionCard } from "@/components/section-card";
 import { requireSession } from "@/lib/server/auth";
 import { getDistributionRequestById, getFornasCatalog } from "@/lib/server/repository";
-import { formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
+import { getExpiryStatus, getUnitVisual } from "@/lib/visual-status";
 
 export default async function DistributionDetailPage({
   params
@@ -22,6 +23,7 @@ export default async function DistributionDetailPage({
 
   const fornasCatalog = await getFornasCatalog();
   const drug = fornasCatalog.find((item) => item.id === request.drugId);
+  const unitVisual = getUnitVisual(request.requestingUnit);
   const timeline =
     request.approvalTrail?.map((entry) => ({
       label: entry.stage.toUpperCase(),
@@ -53,8 +55,14 @@ export default async function DistributionDetailPage({
         }
       >
         <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
-          <div className="space-y-4 rounded-[28px] border border-cyan/20 bg-cyan/10 p-5">
+          <div className={cn("space-y-4 rounded-[28px] border p-5", unitVisual.cardClass)}>
             <p className="text-xs uppercase tracking-[0.35em] text-aqua/75">Ringkasan distribusi</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn("size-3 rounded-full", unitVisual.dotClass)} />
+              <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", unitVisual.badgeClass)}>
+                {unitVisual.unitName}
+              </span>
+            </div>
             <p className="font-heading text-3xl font-semibold text-white">{drug?.genericName}</p>
             <p className="text-mist/70">
               Diminta {request.quantityRequested} • Disetujui {request.quantityApproved} • Diterima {request.quantityReceived}
@@ -77,14 +85,25 @@ export default async function DistributionDetailPage({
               <p className="text-xs uppercase tracking-[0.35em] text-aqua/75">Batch FEFO</p>
               {request.allocations?.length ? (
                 <div className="mt-3 space-y-2 text-sm text-white">
-                  {request.allocations.map((allocation) => (
-                    <div key={allocation.batchId} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <p>{allocation.batchCode}</p>
+                  {request.allocations.map((allocation) => {
+                    const expiry = getExpiryStatus(allocation.expiryDate);
+
+                    return (
+                    <div key={allocation.batchId} className={cn("rounded-2xl border p-3", expiry.cardClass)}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn("size-2.5 rounded-full", expiry.dotClass)} />
+                        <p className="font-semibold">{allocation.batchCode}</p>
+                        <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", expiry.badgeClass)}>
+                          {expiry.label}
+                        </span>
+                      </div>
                       <p className="mt-1 text-mist/70">
                         {allocation.quantity} unit • {allocation.location} • ED {allocation.expiryDate}
                       </p>
+                      <p className="mt-1 text-xs text-mist/60">{expiry.detail}</p>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-mist/75">

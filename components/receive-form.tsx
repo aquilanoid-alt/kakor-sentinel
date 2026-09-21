@@ -5,6 +5,7 @@ import type { FornasDrug, StockBatch } from "@/lib/types";
 import { submitOrQueueMutation } from "@/lib/offline";
 import { resolveMedicationScan } from "@/lib/scan-utils";
 import { cn } from "@/lib/utils";
+import { getExpiryStatus } from "@/lib/visual-status";
 
 const ALPHABET_INITIALS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const COMMON_TOP_PICK_TERMS = [
@@ -194,6 +195,7 @@ export function ReceiveForm({
   }, [searchResults]);
   const parsedUnitPrice =
     unitPrice.trim().length > 0 && Number.isFinite(Number(unitPrice)) ? Number(unitPrice) : null;
+  const expiry = useMemo(() => getExpiryStatus(expiryDate), [expiryDate]);
 
   const discrepancy = physicalQty !== documentQty;
 
@@ -823,14 +825,40 @@ export function ReceiveForm({
             />
           </label>
 
+          <div
+            className={`rounded-[28px] border p-5 ${
+              selectedDrug ? "border-cyan/25 bg-cyan/10" : "border-dashed border-white/10 bg-white/5"
+            }`}
+          >
+            <p className="text-xs uppercase tracking-[0.34em] text-aqua/75">Obat untuk batch ini</p>
+            <h4 className="mt-2 font-heading text-2xl font-semibold text-white">
+              {selectedDrug ? selectedDrug.genericName : "Pilih obat FORNAS sebelum isi batch"}
+            </h4>
+            <p className="mt-2 text-sm leading-6 text-mist/72">
+              {selectedDrug
+                ? `${selectedDrug.dosageForm} ${selectedDrug.strength} • ${selectedDrug.therapeuticClass}`
+                : "Setelah obat dipilih, nama obat, bentuk sediaan, dosis, dan kelas terapi akan tetap tampil di dekat kolom batch."}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-mist/75">
+                {selectedDrug?.facilityLevel ?? "Menunggu pilihan resmi"}
+              </span>
+              <span className="rounded-full border border-teal/20 bg-teal/10 px-3 py-1.5 text-xs text-aqua">
+                {coverageScheme || "Skema belum dipilih"}
+              </span>
+            </div>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-2 block text-sm text-mist/75">Batch</span>
+              <span className="mb-2 block text-sm text-mist/75">
+                Batch {selectedDrug ? `untuk ${selectedDrug.genericName}` : ""}
+              </span>
               <input
                 value={batch}
                 onChange={(event) => setBatch(event.target.value)}
                 className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-white outline-none"
-                placeholder="Nomor batch"
+                placeholder={selectedDrug ? `Nomor batch ${selectedDrug.genericName}` : "Nomor batch"}
               />
             </label>
             <label className="block">
@@ -841,6 +869,17 @@ export function ReceiveForm({
                 onChange={(event) => setExpiryDate(event.target.value)}
                 className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-white outline-none"
               />
+              {expiryDate ? (
+                <div className={cn("mt-2 rounded-2xl border px-3 py-2 text-xs", expiry.cardClass)}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("size-2 rounded-full", expiry.dotClass)} />
+                    <span className={cn("rounded-full border px-2.5 py-1 font-semibold", expiry.badgeClass)}>
+                      {expiry.label}
+                    </span>
+                    <span className="text-mist/70">{expiry.detail}</span>
+                  </div>
+                </div>
+              ) : null}
             </label>
           </div>
 
@@ -875,7 +914,7 @@ export function ReceiveForm({
       </div>
 
         <div className="space-y-4 rounded-[32px] border border-line bg-white/5 p-5 shadow-glow">
-        <div className="rounded-[28px] border border-cyan/20 bg-cyan/10 p-5">
+        <div className={cn("rounded-[28px] border p-5", expiryDate ? expiry.cardClass : "border-cyan/20 bg-cyan/10")}>
           <p className="text-xs uppercase tracking-[0.35em] text-aqua/75">Ringkasan QR batch</p>
           <h4 className="mt-2 font-heading text-2xl font-semibold text-white">{batch || "Batch belum diisi"}</h4>
           <p className="mt-2 text-mist/70">
@@ -887,7 +926,14 @@ export function ReceiveForm({
             Skema {coverageScheme || "Belum dipilih"} • Harga satuan {formatCurrency(parsedUnitPrice)} • Total{" "}
             {formatCurrency((parsedUnitPrice ?? 0) * physicalQty)}
           </p>
-          <p className="mt-1 text-mist/70">ED {expiryDate || "Belum diisi"} • Lokasi rekomendasi A1-R2-B3</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-mist/70">ED {expiryDate || "Belum diisi"} • Lokasi rekomendasi A1-R2-B3</span>
+            {expiryDate ? (
+              <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", expiry.badgeClass)}>
+                {expiry.label}
+              </span>
+            ) : null}
+          </div>
           {selectedDrug && batch && documentNumber ? (
             <img
               src={`/api/qr?value=${encodeURIComponent(`${documentNumber}|${selectedDrug.id}|${batch}`)}`}
@@ -944,7 +990,7 @@ export function ReceiveForm({
       {isPaletteMounted ? (
         <div
           className={cn(
-            "ios-sheet-backdrop fixed inset-0 z-[70] bg-[radial-gradient(circle_at_top,rgba(96,232,206,0.12),transparent_24%),rgba(2,6,14,0.82)] backdrop-blur-md",
+            "ios-sheet-backdrop fixed inset-0 z-[70] bg-[radial-gradient(circle_at_top,rgba(197,255,234,0.62),transparent_32%),rgba(240,250,246,0.68)] backdrop-blur-md",
             isDrugPaletteOpen ? "ios-sheet-backdrop-enter" : "ios-sheet-backdrop-exit"
           )}
         >
@@ -957,25 +1003,25 @@ export function ReceiveForm({
 
           <div
             className={cn(
-              "ios-sheet-panel absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[920px] flex-col overflow-hidden rounded-t-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,25,38,0.995),rgba(9,13,22,0.998))] shadow-[0_-28px_72px_rgba(0,0,0,0.54)] md:bottom-auto md:left-1/2 md:top-1/2 md:max-h-[88vh] md:w-[min(92vw,760px)] md:max-w-none md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[34px]",
+              "ios-sheet-panel absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[920px] flex-col overflow-hidden rounded-t-[34px] border border-teal/20 bg-[linear-gradient(180deg,#fbfffd,#eefbf5_58%,#e0f5ef)] shadow-[0_-28px_72px_rgba(15,68,74,0.2)] md:bottom-auto md:left-1/2 md:top-1/2 md:max-h-[88vh] md:w-[min(92vw,760px)] md:max-w-none md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[34px]",
               isDrugPaletteOpen ? "ios-sheet-panel-enter" : "ios-sheet-panel-exit"
             )}
           >
-            <div className="sticky top-0 z-30 border-b border-white/10 bg-[linear-gradient(180deg,rgba(20,31,48,0.98),rgba(12,18,30,0.96))] px-4 pb-4 pt-3 backdrop-blur-xl">
-              <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-white/15 md:hidden" />
+            <div className="sticky top-0 z-30 border-b border-teal/15 bg-[linear-gradient(180deg,rgba(251,255,253,0.98),rgba(233,250,244,0.96))] px-4 pb-4 pt-3 backdrop-blur-xl">
+              <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-slate-900/15 md:hidden" />
 
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.38em] text-aqua/75">Picker FORNAS</p>
-                  <h4 className="mt-2 font-heading text-[1.4rem] font-semibold text-white">Pilih obat resmi</h4>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-mist/72">
+                  <p className="text-[11px] uppercase tracking-[0.38em] text-teal-700">Picker FORNAS</p>
+                  <h4 className="mt-2 font-heading text-[1.4rem] font-semibold text-slate-900">Pilih obat resmi</h4>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
                     Ketik nama generik atau gunakan Top Picks dan huruf A-Z untuk membuka daftar lebih cepat.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={closeDrugPalette}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                  className="rounded-full border border-teal/20 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm"
                 >
                   Tutup
                 </button>
@@ -983,9 +1029,9 @@ export function ReceiveForm({
 
               <div className="mt-4">
                 <label className="block">
-                  <span className="mb-2 block text-sm text-mist/75">Cari obat FORNAS</span>
-                  <div className="flex items-center gap-3 rounded-[24px] border border-cyan/20 bg-[linear-gradient(135deg,rgba(112,235,210,0.14),rgba(88,155,255,0.08))] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-black/20 text-aqua/85">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">Cari obat FORNAS</span>
+                  <div className="flex items-center gap-3 rounded-[24px] border border-teal/20 bg-white px-4 py-3 shadow-[0_14px_34px_rgba(15,118,110,0.1)]">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-teal/15 bg-teal-50 text-teal-700">
                       <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="11" cy="11" r="6" />
                         <path d="m20 20-3.5-3.5" />
@@ -1001,7 +1047,7 @@ export function ReceiveForm({
                           setDrugId("");
                         }
                       }}
-                      className="w-full bg-transparent text-base text-white outline-none"
+                      className="w-full bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400"
                       placeholder="Cari nama obat, tablet, sirup, atau 500 mg"
                     />
                     {drugQuery ? (
@@ -1014,7 +1060,7 @@ export function ReceiveForm({
                           setOfficialSearchResults([]);
                           drugSearchInputRef.current?.focus();
                         }}
-                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-sm text-mist/80 transition hover:bg-white/10"
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-teal/15 bg-teal-50 text-sm text-slate-600 transition hover:bg-teal-100"
                       >
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2">
                           <path d="M6 6l12 12" />
@@ -1025,22 +1071,22 @@ export function ReceiveForm({
                   </div>
                 </label>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] uppercase tracking-[0.25em] text-mist/60">
+                  <span className="rounded-full border border-teal/20 bg-white px-3 py-1.5 text-[11px] uppercase tracking-[0.25em] text-teal-700 shadow-sm">
                     {usesOfficialSearch
                       ? isOfficialSearchLoading
                         ? "Mencari e-FORNAS..."
                         : `${searchResults.length} hasil resmi`
                       : `${searchResults.length} item huruf ${activeInitial || availableInitials[0] || "-"}`}
                   </span>
-                  <span className="text-sm text-mist/70">
+                  <span className="text-sm text-slate-600">
                     {usesOfficialSearch
                       ? "Ketik minimal 2 huruf untuk ambil hasil langsung dari e-FORNAS resmi."
                       : "Belum mengetik? Gunakan Top Picks, favorit fasilitas, atau lompat huruf."}
                   </span>
                 </div>
-                {officialSearchError ? <p className="mt-2 text-sm text-amber-100">{officialSearchError}</p> : null}
+                {officialSearchError ? <p className="mt-2 text-sm font-medium text-amber-700">{officialSearchError}</p> : null}
                 {!usesOfficialSearch && officialInitialError ? (
-                  <p className="mt-2 text-sm text-amber-100">{officialInitialError}</p>
+                  <p className="mt-2 text-sm font-medium text-amber-700">{officialInitialError}</p>
                 ) : null}
               </div>
 
@@ -1048,17 +1094,17 @@ export function ReceiveForm({
                 <div className="mt-4 space-y-4">
                   {topPickDrugs.length > 0 ? (
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.34em] text-mist/45">Top Picks fasilitas</p>
+                      <p className="text-[11px] uppercase tracking-[0.34em] text-slate-500">Top Picks fasilitas</p>
                       <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                         {topPickDrugs.map((drug) => (
                           <button
                             key={drug.id}
                             type="button"
                             onClick={() => handlePickDrug(drug)}
-                            className="shrink-0 rounded-[18px] border border-cyan/20 bg-[linear-gradient(135deg,rgba(126,242,204,0.16),rgba(125,211,252,0.1))] px-3 py-2 text-left shadow-[0_10px_24px_rgba(59,130,246,0.08)]"
+                            className="shrink-0 rounded-[18px] border border-teal/20 bg-white px-3 py-2 text-left shadow-[0_10px_24px_rgba(15,118,110,0.1)]"
                           >
-                            <p className="text-sm font-semibold text-white">{drug.genericName}</p>
-                            <p className="mt-1 text-xs text-mist/65">
+                            <p className="text-sm font-semibold text-slate-900">{drug.genericName}</p>
+                            <p className="mt-1 text-xs text-slate-500">
                               {drug.dosageForm} {drug.strength}
                             </p>
                           </button>
@@ -1069,14 +1115,14 @@ export function ReceiveForm({
 
                   {favoriteDrugs.length > 0 ? (
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.34em] text-mist/45">Favorit fasilitas</p>
+                      <p className="text-[11px] uppercase tracking-[0.34em] text-slate-500">Favorit fasilitas</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {favoriteDrugs.map((drug) => (
                           <button
                             key={drug.id}
                             type="button"
                             onClick={() => handlePickDrug(drug)}
-                            className="rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-sm text-white"
+                            className="rounded-full border border-amber-300/40 bg-amber-50 px-3 py-2 text-sm font-medium text-slate-800"
                           >
                             {drug.genericName}
                           </button>
@@ -1087,14 +1133,14 @@ export function ReceiveForm({
 
                   {recentDrugs.length > 0 ? (
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.34em] text-mist/45">Pilihan terakhir</p>
+                      <p className="text-[11px] uppercase tracking-[0.34em] text-slate-500">Pilihan terakhir</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {recentDrugs.map((drug) => (
                           <button
                             key={drug.id}
                             type="button"
                             onClick={() => handlePickDrug(drug)}
-                            className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-2 text-sm text-white"
+                            className="rounded-full border border-teal/20 bg-white px-3 py-2 text-sm font-medium text-slate-800"
                           >
                             {drug.genericName}
                           </button>
@@ -1104,7 +1150,7 @@ export function ReceiveForm({
                   ) : null}
 
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.34em] text-mist/45">Lompat huruf</p>
+                    <p className="text-[11px] uppercase tracking-[0.34em] text-slate-500">Lompat huruf</p>
                     <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                       {availableInitials.map((initial) => (
                         <button
@@ -1117,8 +1163,8 @@ export function ReceiveForm({
                           className={cn(
                             "shrink-0 rounded-full border px-3 py-2 text-sm font-semibold transition",
                             activeInitial === initial
-                              ? "border-cyan/35 bg-cyan/15 text-white shadow-[0_10px_24px_rgba(60,195,255,0.14)]"
-                              : "border-white/10 bg-white/5 text-mist/70"
+                              ? "border-teal/35 bg-teal-600 text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)]"
+                              : "border-teal/15 bg-white text-slate-600 shadow-sm"
                             )}
                           >
                           {initial}
@@ -1132,16 +1178,16 @@ export function ReceiveForm({
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
               {(isOfficialSearchLoading || (!usesOfficialSearch && isOfficialInitialLoading)) ? (
-                <div className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-5 text-sm text-mist/70">
+                <div className="rounded-[24px] border border-teal/15 bg-white px-4 py-5 text-sm font-medium text-slate-600 shadow-sm">
                   Menyusun hasil resmi dari e-FORNAS...
                 </div>
               ) : null}
 
               {groupedFilteredCatalog.map((group) => (
                 <div key={group.initial} className="space-y-3">
-                  <div className="sticky top-0 z-20 flex items-center justify-between rounded-full border border-white/10 bg-[linear-gradient(180deg,rgba(14,22,34,0.94),rgba(11,17,28,0.9))] px-3 py-2 text-xs uppercase tracking-[0.3em] text-aqua/80 backdrop-blur">
+                  <div className="sticky top-0 z-20 flex items-center justify-between rounded-full border border-teal/15 bg-white/90 px-3 py-2 text-xs uppercase tracking-[0.3em] text-teal-700 shadow-sm backdrop-blur">
                     <span>Huruf {group.initial}</span>
-                    <span className="text-[10px] tracking-[0.2em] text-mist/45">{group.items.length} item</span>
+                    <span className="text-[10px] tracking-[0.2em] text-slate-500">{group.items.length} item</span>
                   </div>
 
                   {group.items.map((drug) => {
@@ -1154,8 +1200,8 @@ export function ReceiveForm({
                         className={cn(
                           "overflow-hidden rounded-[28px] border transition",
                           isActive
-                            ? "border-cyan/40 bg-[linear-gradient(145deg,rgba(74,196,255,0.18),rgba(107,239,210,0.12))] shadow-[0_18px_38px_rgba(28,144,255,0.18)]"
-                            : "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.025))]"
+                            ? "border-teal/35 bg-[linear-gradient(145deg,#dffbf1,#eefcff)] shadow-[0_18px_38px_rgba(15,118,110,0.16)]"
+                            : "border-teal/15 bg-white shadow-[0_12px_30px_rgba(15,68,74,0.08)]"
                         )}
                       >
                         <div className="flex items-start gap-3 px-4 py-4">
@@ -1165,16 +1211,16 @@ export function ReceiveForm({
                             className="flex-1 text-left"
                           >
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-base font-semibold text-white">{drug.genericName}</p>
-                              <span className="rounded-full border border-teal/20 bg-teal/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-aqua">
+                              <p className="text-base font-semibold text-slate-900">{drug.genericName}</p>
+                              <span className="rounded-full border border-teal/20 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-teal-700">
                                 {formatDrugMetaBadge(drug.dosageForm)}
                               </span>
-                              <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/88">
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
                                 {formatDrugMetaBadge(drug.strength)}
                               </span>
                             </div>
-                            <p className="mt-2 text-sm leading-6 text-mist/72">{drug.therapeuticClass}</p>
-                            <p className="mt-3 text-[11px] uppercase tracking-[0.24em] text-mist/45">{drug.facilityLevel}</p>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">{drug.therapeuticClass}</p>
+                            <p className="mt-3 text-[11px] uppercase tracking-[0.24em] text-slate-500">{drug.facilityLevel}</p>
                           </button>
 
                           <div className="flex shrink-0 flex-col items-end gap-2">
@@ -1191,8 +1237,8 @@ export function ReceiveForm({
                               className={cn(
                                 "rounded-full border px-3 py-2 text-[11px] font-semibold transition",
                                 isFavorite
-                                  ? "border-amber-300/30 bg-amber-400/15 text-amber-100"
-                                  : "border-white/10 bg-white/5 text-mist/75"
+                                  ? "border-amber-300/50 bg-amber-50 text-amber-800"
+                                  : "border-teal/15 bg-teal-50 text-teal-700"
                               )}
                             >
                               {isFavorite ? "Tersimpan" : "Favorit"}
@@ -1206,7 +1252,7 @@ export function ReceiveForm({
               ))}
 
               {searchResults.length === 0 && !isOfficialSearchLoading && !isOfficialInitialLoading ? (
-                <div className="rounded-[24px] border border-dashed border-white/10 bg-white/5 px-4 py-5 text-sm text-mist/70">
+                <div className="rounded-[24px] border border-dashed border-teal/20 bg-white px-4 py-5 text-sm text-slate-600 shadow-sm">
                   Tidak ada obat FORNAS yang cocok dengan kata kunci ini. Coba nama generik, bentuk sediaan, kekuatan, atau pilih huruf awal.
                 </div>
               ) : null}

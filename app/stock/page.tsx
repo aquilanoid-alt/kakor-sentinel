@@ -3,6 +3,8 @@ import { SectionCard } from "@/components/section-card";
 import { StockOpnameForm } from "@/components/stock-opname-form";
 import { requireSession } from "@/lib/server/auth";
 import { getRackMap, getStockBatches } from "@/lib/server/repository";
+import { cn } from "@/lib/utils";
+import { getExpiryStatus } from "@/lib/visual-status";
 
 export default async function StockPage() {
   const user = await requireSession();
@@ -51,14 +53,24 @@ export default async function StockPage() {
             {stockBatches
               .slice()
               .sort((left, right) => left.expiryDate.localeCompare(right.expiryDate))
-              .map((batch) => (
-                <div key={batch.id} className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+              .map((batch) => {
+                const expiry = getExpiryStatus(batch.expiryDate);
+
+                return (
+                <div key={batch.id} className={cn("rounded-[24px] border p-4", expiry.cardClass)}>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="font-semibold text-white">{batch.batch}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn("size-2.5 rounded-full", expiry.dotClass)} />
+                        <p className="font-semibold text-white">{batch.batch}</p>
+                        <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", expiry.badgeClass)}>
+                          {expiry.label}
+                        </span>
+                      </div>
                       <p className="mt-1 text-sm text-mist/70">
                         Lokasi {batch.location} • ED {batch.expiryDate}
                       </p>
+                      <p className="mt-1 text-xs font-medium text-mist/65">{expiry.detail}</p>
                       <p className="mt-2 text-sm text-mist/60">
                         Saldo {batch.quantity} • Reserved {batch.reserved} • Siap pakai {Math.max(batch.quantity - batch.reserved, 0)}
                       </p>
@@ -72,7 +84,8 @@ export default async function StockPage() {
                     </span>
                   </div>
                 </div>
-              ))}
+              );
+              })}
           </div>
         </SectionCard>
       </div>
