@@ -617,7 +617,8 @@ function summarizeSuspiciousPatterns(
 function deriveAlerts(
   persistedAlerts: AlertItem[],
   stockBatches: StockBatch[],
-  distributionRequests: DistributionRequest[]
+  distributionRequests: DistributionRequest[],
+  fornasCatalog: FornasDrug[]
 ) {
   const derived: AlertItem[] = [];
   const lowStockByDrug = new Map<string, number>();
@@ -633,8 +634,9 @@ function deriveAlerts(
   });
 
   lowStockByDrug.forEach((total, drugId) => {
-    if (total <= LOW_STOCK_THRESHOLD) {
-      derived.push(buildLowStockAlert(drugId, total));
+        if (total <= LOW_STOCK_THRESHOLD) {
+      const drugName = fornasCatalog.find((item) => item.id === drugId)?.genericName ?? drugId;
+      derived.push(buildLowStockAlert(drugId, drugName, total));
     }
   });
 
@@ -665,8 +667,9 @@ function buildDashboardSnapshotFromCollections(input: {
   auditTrail: AuditEvent[];
   dispenses: DispenseRecord[];
   stockOpnames: StockOpnameRecord[];
+  fornasCatalog: FornasDrug[];
 }): DashboardSnapshot {
-  const alerts = deriveAlerts(input.persistedAlerts, input.stockBatches, input.distributionRequests)
+  const alerts = deriveAlerts(input.persistedAlerts, input.stockBatches, input.distributionRequests, input.fornasCatalog)
     .sort((left, right) => {
       const severityOrder = { critical: 0, warning: 1, info: 2 } as const;
       return severityOrder[left.severity] - severityOrder[right.severity];
@@ -709,14 +712,16 @@ async function refreshDashboardSummary() {
       persistedAlerts,
       auditTrail,
       dispenses,
-      stockOpnames
+      stockOpnames,
+      fornasCatalog 
     ] = await Promise.all([
       getStockBatches(),
       getDistributionRequests(),
       getAlerts(),
       getAuditTrail(),
       getDispenseTransactions(),
-      getStockOpnameRecords()
+      getStockOpnameRecords(),
+      getFornasCatalog()
     ]);
 
     const snapshot = buildDashboardSnapshotFromCollections({
@@ -725,7 +730,8 @@ async function refreshDashboardSummary() {
       persistedAlerts,
       auditTrail,
       dispenses,
-      stockOpnames
+      stockOpnames,
+      fornasCatalog
     });
 
     await writeDocument<DashboardSnapshot & { id: string; updatedAt: string }>("dashboard_summary", {
@@ -990,14 +996,16 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     persistedAlerts,
     auditTrail,
     dispenses,
-    stockOpnames
+    stockOpnames,
+    fornasCatalog
   ] = await Promise.all([
     getStockBatches(),
     getDistributionRequests(),
     getAlerts(),
     getAuditTrail(),
     getDispenseTransactions(),
-    getStockOpnameRecords()
+    getStockOpnameRecords(),
+    getFornasCatalog()
   ]);
 
   const snapshot = buildDashboardSnapshotFromCollections({
@@ -1006,7 +1014,8 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     persistedAlerts,
     auditTrail,
     dispenses,
-    stockOpnames
+    stockOpnames,
+    fornasCatalog
   });
   if (dbOrNull()) {
     await writeDocument<DashboardSnapshot & { id: string; updatedAt: string }>("dashboard_summary", {
