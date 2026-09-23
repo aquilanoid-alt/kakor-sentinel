@@ -2,13 +2,18 @@ import { AppShell } from "@/components/app-shell";
 import { SectionCard } from "@/components/section-card";
 import { StockOpnameForm } from "@/components/stock-opname-form";
 import { requireSession } from "@/lib/server/auth";
-import { getRackMap, getStockBatches } from "@/lib/server/repository";
+import { getFornasCatalog, getRackMap, getStockBatches } from "@/lib/server/repository";
 import { cn } from "@/lib/utils";
 import { getExpiryStatus } from "@/lib/visual-status";
 
 export default async function StockPage() {
   const user = await requireSession();
-  const [stockBatches, rackMap] = await Promise.all([getStockBatches(), getRackMap()]);
+  const [stockBatches, rackMap, catalog] = await Promise.all([
+    getStockBatches(),
+    getRackMap(),
+    getFornasCatalog()
+  ]);
+  const drugNameById = new Map(catalog.map((drug) => [drug.id, drug.genericName]));
 
   return (
     <AppShell
@@ -16,7 +21,7 @@ export default async function StockPage() {
       subtitle="FEFO, mapping lokasi rak, monitoring batch hampir expired, dan stock opname otomatis untuk menjaga gudang selalu terkendali."
       user={user}
     >
-      <StockOpnameForm batches={stockBatches} />
+      <StockOpnameForm batches={stockBatches} catalog={catalog} />
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <SectionCard
@@ -55,6 +60,7 @@ export default async function StockPage() {
               .sort((left, right) => left.expiryDate.localeCompare(right.expiryDate))
               .map((batch) => {
                 const expiry = getExpiryStatus(batch.expiryDate);
+                const drugName = drugNameById.get(batch.drugId) ?? batch.drugId;
 
                 return (
                 <div key={batch.id} className={cn("rounded-[24px] border p-4", expiry.cardClass)}>
@@ -62,13 +68,13 @@ export default async function StockPage() {
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={cn("size-2.5 rounded-full", expiry.dotClass)} />
-                        <p className="font-semibold text-white">{batch.batch}</p>
+                        <p className="font-semibold text-white">{drugName}</p>
                         <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", expiry.badgeClass)}>
                           {expiry.label}
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-mist/70">
-                        Lokasi {batch.location} • ED {batch.expiryDate}
+                        Batch {batch.batch} • Lokasi {batch.location} • ED {batch.expiryDate}
                       </p>
                       <p className="mt-1 text-xs font-medium text-mist/65">{expiry.detail}</p>
                       <p className="mt-2 text-sm text-mist/60">

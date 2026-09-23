@@ -1,20 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { StockBatch } from "@/lib/types";
+import type { FornasDrug, StockBatch } from "@/lib/types";
 import { submitOrQueueMutation } from "@/lib/offline";
 import { cn } from "@/lib/utils";
 import { getExpiryStatus } from "@/lib/visual-status";
 
-export function StockOpnameForm({ batches }: { batches: StockBatch[] }) {
+export function StockOpnameForm({
+  batches,
+  catalog
+}: {
+  batches: StockBatch[];
+  catalog: FornasDrug[];
+}) {
   const [batchId, setBatchId] = useState(batches[0]?.id ?? "");
   const [physical, setPhysical] = useState(batches[0]?.quantity ?? 0);
   const [message, setMessage] = useState("Siap mengirim hasil stock opname ke backend.");
+
+  const drugNameById = useMemo(
+    () => new Map(catalog.map((drug) => [drug.id, drug.genericName])),
+    [catalog]
+  );
 
   const selected = useMemo(
     () => batches.find((batch) => batch.id === batchId) ?? batches[0],
     [batchId, batches]
   );
+
+  const selectedDrugName = selected ? drugNameById.get(selected.drugId) ?? selected.drugId : "";
 
   const variance = physical - (selected?.quantity ?? 0);
   const expiry = getExpiryStatus(selected?.expiryDate);
@@ -56,7 +69,7 @@ export function StockOpnameForm({ batches }: { batches: StockBatch[] }) {
             >
               {batches.map((batch) => (
                 <option key={batch.id} value={batch.id}>
-                  {batch.batch} - {batch.location}
+                  {drugNameById.get(batch.drugId) ?? batch.drugId} • Batch {batch.batch} - {batch.location}
                 </option>
               ))}
             </select>
@@ -86,13 +99,13 @@ export function StockOpnameForm({ batches }: { batches: StockBatch[] }) {
           <p className="text-xs uppercase tracking-[0.35em] text-aqua/75">Sistem FEFO</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className={cn("size-2.5 rounded-full", expiry.dotClass)} />
-            <p className="font-heading text-2xl font-semibold text-white">{selected?.batch}</p>
+            <p className="font-heading text-2xl font-semibold text-white">{selectedDrugName}</p>
             <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", expiry.badgeClass)}>
               {expiry.label}
             </span>
           </div>
           <p className="mt-2 text-mist/70">
-            Lokasi {selected?.location} • ED {selected?.expiryDate}
+            Batch {selected?.batch} • Lokasi {selected?.location} • ED {selected?.expiryDate}
           </p>
           <p className="mt-1 text-xs font-medium text-mist/65">{expiry.detail}</p>
           <p className="mt-2 text-mist/70">

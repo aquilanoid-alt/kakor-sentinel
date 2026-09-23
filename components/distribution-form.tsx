@@ -32,6 +32,10 @@ export function DistributionForm({
 
   const filtered = requests.filter((item) => item.status === status || status === "all");
   const activeUnitVisual = getUnitVisual(requestingUnit);
+  const drugNameById = useMemo(
+    () => new Map(catalog.map((drug) => [drug.id, drug.genericName])),
+    [catalog]
+  );
 
   const handleSubmit = async () => {
     const result = await submitOrQueueMutation("distribution", "/api/distributions", {
@@ -192,6 +196,7 @@ export function DistributionForm({
         <div className="space-y-3">
           {filtered.map((request) => {
             const unitVisual = getUnitVisual(request.requestingUnit);
+            const drugName = drugNameById.get(request.drugId) ?? request.drugId;
 
             return (
             <div key={request.id} className={cn("rounded-[26px] border p-4", unitVisual.cardClass)}>
@@ -199,13 +204,13 @@ export function DistributionForm({
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={cn("size-2.5 rounded-full", unitVisual.dotClass)} />
-                    <p className="font-semibold text-white">{request.requestingUnit || "Belum diisi"}</p>
+                    <p className="font-semibold text-white">{drugName}</p>
                     <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", unitVisual.badgeClass)}>
                       {unitVisual.label}
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-mist/60">
-                    {[request.cluster, request.requestedBy].filter(Boolean).join(" • ")}
+                    {[request.requestingUnit || "Unit belum diisi", request.cluster, request.requestedBy].filter(Boolean).join(" • ")}
                   </p>
                   <p className="mt-2 text-sm text-mist/70">
                     Diminta {request.quantityRequested} • Disetujui {request.quantityApproved} • Diterima {request.quantityReceived}
