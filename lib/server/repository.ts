@@ -1724,7 +1724,6 @@ export async function replaceFornasCatalog(
   actor: SessionUser,
   sourceLabel = "FORNAS resmi"
 ) {
-  const currentRows = await readStoredCollection<FornasDrug>("fornas_catalog");
   const payloads = rows.map((row) => {
     const id =
       row.id ??
@@ -1739,35 +1738,15 @@ export async function replaceFornasCatalog(
   await writeDocuments<FornasDrug>("fornas_catalog", payloads);
   const importedIds = new Set(payloads.map((item) => item.id));
 
-  // Jangan hapus entri katalog yang masih dirujuk oleh data transaksi aktif
-  // (stok, distribusi, penerimaan, pemakaian, stock opname). Sinkronisasi FORNAS
-  // resmi seharusnya menambah/memperbarui katalog, bukan merusak referensi
-  // riwayat yang sudah ada, sekalipun obat tersebut tidak muncul lagi di hasil
-  // sinkronisasi terbaru (misalnya karena pencarian resmi hanya mencakup sebagian).
-  const [referencedStockDrugIds, referencedDistributionDrugIds, referencedReceiptDrugIds, referencedDispenseDrugIds] =
-    await Promise.all([
-      readStoredCollection<{ drugId: string }>("stock_batches"),
-      readStoredCollection<{ drugId: string }>("distribution_requests"),
-      readStoredCollection<{ drugId: string }>("receipts"),
-      readStoredCollection<{ drugId: string }>("dispense_transactions")
-    ]);
-  const referencedIds = new Set(
-    [
-      ...referencedStockDrugIds,
-      ...referencedDistributionDrugIds,
-      ...referencedReceiptDrugIds,
-      ...referencedDispenseDrugIds
-    ]
-      .map((row) => row.drugId)
-      .filter(Boolean)
-  );
-
-  const staleIds = currentRows
-    .map((item) => item.id)
-    .filter((id) => !importedIds.has(id) && !referencedIds.has(id));
-
-  await deleteDocuments("fornas_catalog", staleIds);
-
+  // PENTING: sinkronisasi FORNAS resmi TIDAK PERNAH menghapus entri katalog
+  // lama, sekalipun tidak muncul di hasil sinkron terbaru (misalnya karena
+  // pencarian/sync hanya mencakup sebagian kelas terapi). Katalog obat adalah
+  // data master yang bisa dirujuk oleh stok, distribusi, penerimaan, dan
+  // riwayat pemakaian kapan saja — menghapusnya secara otomatis berisiko
+  // membuat seluruh katalog hilang tanpa sengaja (misalnya jika sync dijalankan
+  // dengan hasil kosong/sebagian tepat setelah data operasional direset).
+  // Penghapusan entri katalog, jika benar-benar diperlukan, harus dilakukan
+  // secara manual dan sadar oleh admin, bukan otomatis oleh proses sync.
   await createAuditEvent(
     actor,
     `Sinkron ${sourceLabel} ${importedIds.size} item`,
@@ -1778,7 +1757,7 @@ export async function replaceFornasCatalog(
 
   return {
     imported: importedIds.size,
-    purged: staleIds.length,
+    purged: 0,
     sampleIds: Array.from(importedIds).slice(0, 5)
   };
 }
