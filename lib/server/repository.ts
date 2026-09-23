@@ -1739,9 +1739,32 @@ export async function replaceFornasCatalog(
   await writeDocuments<FornasDrug>("fornas_catalog", payloads);
   const importedIds = new Set(payloads.map((item) => item.id));
 
+  // Jangan hapus entri katalog yang masih dirujuk oleh data transaksi aktif
+  // (stok, distribusi, penerimaan, pemakaian, stock opname). Sinkronisasi FORNAS
+  // resmi seharusnya menambah/memperbarui katalog, bukan merusak referensi
+  // riwayat yang sudah ada, sekalipun obat tersebut tidak muncul lagi di hasil
+  // sinkronisasi terbaru (misalnya karena pencarian resmi hanya mencakup sebagian).
+  const [referencedStockDrugIds, referencedDistributionDrugIds, referencedReceiptDrugIds, referencedDispenseDrugIds] =
+    await Promise.all([
+      readStoredCollection<{ drugId: string }>("stock_batches"),
+      readStoredCollection<{ drugId: string }>("distribution_requests"),
+      readStoredCollection<{ drugId: string }>("receipts"),
+      readStoredCollection<{ drugId: string }>("dispense_transactions")
+    ]);
+  const referencedIds = new Set(
+    [
+      ...referencedStockDrugIds,
+      ...referencedDistributionDrugIds,
+      ...referencedReceiptDrugIds,
+      ...referencedDispenseDrugIds
+    ]
+      .map((row) => row.drugId)
+      .filter(Boolean)
+  );
+
   const staleIds = currentRows
     .map((item) => item.id)
-    .filter((id) => !importedIds.has(id));
+    .filter((id) => !importedIds.has(id) && !referencedIds.has(id));
 
   await deleteDocuments("fornas_catalog", staleIds);
 
