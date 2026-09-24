@@ -185,7 +185,6 @@ function toFornasDrug(variant: OfficialDrugVariantRow, detail?: OfficialDrugDeta
     facilityLevel: buildFacilityLevel(detail),
     cluster: ["Farmasi"],
     isPriority: Boolean(detail?._oen || detail?._program || detail?._kanker),
-    coverageScheme: undefined,
     referencePrice: null,
     referencePriceSource: "",
     referencePriceUpdatedAt: ""

@@ -251,16 +251,33 @@ async function writeDocument<T extends { id: string }>(collectionName: Collectio
   return payload;
 }
 
+function stripUndefinedFields<T extends Record<string, unknown>>(payload: T): T {
+  const clean = { ...payload };
+  (Object.keys(clean) as Array<keyof T>).forEach((key) => {
+    if (clean[key] === undefined) {
+      delete clean[key];
+    }
+  });
+  return clean;
+}
+
 async function writeDocuments<T extends { id: string }>(collectionName: CollectionName, payloads: T[]) {
   const db = requireWritableDb(collectionName);
   if (!db) {
     return payloads;
   }
 
+  // Firestore menolak field bernilai "undefined" (berbeda dengan null, yang
+  // diizinkan). Bersihkan dulu supaya penulisan tidak gagal hanya karena satu
+  // field opsional (mis. coverageScheme) yang tidak terisi.
+  const sanitizedPayloads = payloads.map((payload) =>
+    stripUndefinedFields(payload as unknown as Record<string, unknown>)
+  ) as unknown as T[];
+
   if (typeof db.bulkWriter === "function") {
     const writer = db.bulkWriter();
     await Promise.all(
-      payloads.map((payload) => writer.set(db.collection(collectionName).doc(payload.id), payload))
+      sanitizedPayloads.map((payload) => writer.set(db.collection(collectionName).doc(payload.id), payload))
     );
     await writer.close();
     invalidateCollectionCache(collectionName);
@@ -270,8 +287,8 @@ async function writeDocuments<T extends { id: string }>(collectionName: Collecti
     return payloads;
   }
 
-  for (let index = 0; index < payloads.length; index += BATCH_WRITE_SIZE) {
-    const chunk = payloads.slice(index, index + BATCH_WRITE_SIZE);
+  for (let index = 0; index < sanitizedPayloads.length; index += BATCH_WRITE_SIZE) {
+    const chunk = sanitizedPayloads.slice(index, index + BATCH_WRITE_SIZE);
     const batch = db.batch();
 
     chunk.forEach((payload) => {
