@@ -3,6 +3,7 @@ import { ensureAllowedRole, getOptionalSessionUser } from "@/lib/server/auth";
 import { syncOfficialFornasCatalog } from "@/lib/server/fornas-official";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST() {
   const session = await getOptionalSessionUser();

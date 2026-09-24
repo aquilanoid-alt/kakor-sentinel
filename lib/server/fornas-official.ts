@@ -223,12 +223,16 @@ async function searchOfficialFornasRows(query: string, minLength: number, mode: 
     new Map(indexRows.map((row) => [row._id_obat, row])).values()
   ).slice(0, mode === "initial" ? 80 : 24);
 
-  const variantGroups = await mapWithConcurrency(uniqueDrugIds, 6, async (row) =>
-    fetchOfficialApi<OfficialDrugVariantRow[]>({
-      type: "byidobat",
-      value: String(row._id_obat)
-    })
-  );
+  const variantGroups = await mapWithConcurrency(uniqueDrugIds, 6, async (row) => {
+    try {
+      return await fetchOfficialApi<OfficialDrugVariantRow[]>({
+        type: "byidobat",
+        value: String(row._id_obat)
+      });
+    } catch {
+      return [];
+    }
+  });
 
   const normalizedInitial = normalizedQuery.charAt(0).toLowerCase();
   const queryTerms = normalizedQuery.toLowerCase().split(/\s+/).filter(Boolean);
@@ -287,12 +291,19 @@ export async function syncOfficialFornasCatalog(actor: SessionUser) {
     new Map(indexRows.map((row) => [row._id_obat, row])).values()
   );
 
-  const variantGroups = await mapWithConcurrency(uniqueDrugIds, REQUEST_CONCURRENCY, async (row) =>
-    fetchOfficialApi<OfficialDrugVariantRow[]>({
-      type: "byidobat",
-      value: String(row._id_obat)
-    })
-  );
+  const variantGroups = await mapWithConcurrency(uniqueDrugIds, REQUEST_CONCURRENCY, async (row) => {
+    try {
+      return await fetchOfficialApi<OfficialDrugVariantRow[]>({
+        type: "byidobat",
+        value: String(row._id_obat)
+      });
+    } catch {
+      // Satu obat yang gagal diambil (server lambat, rate-limit, dsb.) tidak boleh
+      // menggagalkan seluruh sinkronisasi ribuan obat lainnya. Lewati saja obat ini;
+      // ia akan terambil lagi pada sinkronisasi berikutnya.
+      return [];
+    }
+  });
 
   const variants = variantGroups
     .flat()
