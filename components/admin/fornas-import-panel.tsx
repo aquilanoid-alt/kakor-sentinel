@@ -53,28 +53,46 @@ export function FornasImportPanel() {
   const handleOfficialSync = async () => {
     setLoadingSync(true);
 
+    const letters = "abcdefghijklmnopqrstuvwxyz".split("");
+    let totalImported = 0;
+    let totalDrugs = 0;
+    let totalVariants = 0;
+    let sourceUrl = "";
+
     try {
-      const response = await fetch("/api/admin/fornas/sync", {
-        method: "POST"
-      });
+      for (let index = 0; index < letters.length; index += 1) {
+        const letter = letters[index];
+        setMessage(`Sinkron e-FORNAS huruf ${letter.toUpperCase()} (${index + 1}/${letters.length})...`);
 
-      const result = (await response.json()) as {
-        ok?: boolean;
-        error?: string;
-        imported?: number;
-        purged?: number;
-        fetchedDrugs?: number;
-        fetchedVariants?: number;
-        sampleIds?: string[];
-        sourceUrl?: string;
-      };
+        const response = await fetch(`/api/admin/fornas/sync?initial=${letter}`, {
+          method: "POST"
+        });
 
-      if (!response.ok || result.ok === false) {
-        throw new Error(result.error ?? "Sinkron e-FORNAS gagal.");
+        const result = (await response.json()) as {
+          ok?: boolean;
+          error?: string;
+          imported?: number;
+          purged?: number;
+          fetchedDrugs?: number;
+          fetchedVariants?: number;
+          sampleIds?: string[];
+          sourceUrl?: string;
+        };
+
+        if (!response.ok || result.ok === false) {
+          throw new Error(
+            `Sinkron terhenti di huruf ${letter.toUpperCase()}: ${result.error ?? "Sinkron e-FORNAS gagal."} (huruf sebelumnya sudah tersimpan, coba klik Sinkron lagi untuk melanjutkan.)`
+          );
+        }
+
+        totalImported += result.imported ?? 0;
+        totalDrugs += result.fetchedDrugs ?? 0;
+        totalVariants += result.fetchedVariants ?? 0;
+        sourceUrl = result.sourceUrl ?? sourceUrl;
       }
 
       setMessage(
-        `Sinkron e-FORNAS selesai: ${result.imported} item aktif dari ${result.fetchedDrugs} obat dan ${result.fetchedVariants} varian. Item lama yang diganti: ${result.purged}. Sumber: ${result.sourceUrl ?? "e-FORNAS"}.`
+        `Sinkron e-FORNAS selesai (A-Z): ${totalImported} item tersimpan dari ${totalDrugs} obat dan ${totalVariants} varian. Sumber: ${sourceUrl || "e-FORNAS"}.`
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Sinkron e-FORNAS gagal.");

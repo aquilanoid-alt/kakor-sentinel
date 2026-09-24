@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { ensureAllowedRole, getOptionalSessionUser } from "@/lib/server/auth";
-import { syncOfficialFornasCatalog } from "@/lib/server/fornas-official";
+import { syncOfficialFornasCatalog, syncOfficialFornasCatalogByInitial } from "@/lib/server/fornas-official";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-export async function POST() {
+export async function POST(request: Request) {
   const session = await getOptionalSessionUser();
   if (!session) {
     return NextResponse.json({ ok: false, error: "Session tidak ditemukan." }, { status: 401 });
@@ -13,7 +13,17 @@ export async function POST() {
 
   try {
     ensureAllowedRole(session, ["Admin (Apoteker)", "Petugas Farmasi"]);
-    const result = await syncOfficialFornasCatalog(session);
+
+    // Kalau klien mengirim ?initial=a, sinkron HANYA huruf itu (cepat, tidak
+    // pernah timeout). Tanpa parameter, jalankan sinkron lama (semua obat
+    // sekaligus) — dipertahankan untuk kompatibilitas, tapi berisiko timeout
+    // untuk katalog nasional yang besar.
+    const url = new URL(request.url);
+    const initial = url.searchParams.get("initial");
+
+    const result = initial
+      ? await syncOfficialFornasCatalogByInitial(initial, session)
+      : await syncOfficialFornasCatalog(session);
 
     return NextResponse.json({
       ok: true,

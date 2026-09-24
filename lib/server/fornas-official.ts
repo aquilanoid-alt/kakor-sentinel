@@ -336,4 +336,76 @@ export async function syncOfficialFornasCatalog(actor: SessionUser) {
   };
 }
 
+export const SYNC_INITIALS = "abcdefghijklmnopqrstuvwxyz".split("");
+
+// Sinkron SATU huruf awal saja (bukan seluruh A-Z sekaligus). Katalog nasional
+// e-FORNAS berisi ribuan obat; mengambil semuanya dalam satu permintaan
+// hampir selalu melewati batas waktu maksimum fungsi server (habis waktu /
+// timeout). Dengan memecah per huruf, setiap permintaan jauh lebih kecil dan
+// selesai jauh di bawah batas waktu. Panggil fungsi ini 26 kali berturut-turut
+// (satu per huruf) dari sisi klien untuk mencakup seluruh katalog.
+export async function syncOfficialFornasCatalogByInitial(initial: string, actor: SessionUser) {
+  const normalizedInitial = initial.trim().charAt(0).toLowerCase();
+  if (!normalizedInitial) {
+    throw new Error("Huruf awal tidak valid.");
+  }
+
+  const indexRows = await fetchOfficialApi<OfficialDrugIndexRow[]>({
+    type: "byname",
+    value: normalizedInitial
+  });
+
+  const uniqueDrugIds = Array.from(
+    new Map(indexRows.map((row) => [row._id_obat, row])).values()
+  );
+
+  const variantGroups = await mapWithConcurrency(uniqueDrugIds, REQUEST_CONCURRENCY, async (row) => {
+    try {
+      return await fetchOfficialApi<OfficialDrugVariantRow[]>({
+        type: "byidobat",
+        value: String(row._id_obat)
+      });
+    } catch {
+      return [];
+    }
+  });
+
+  const variants = variantGroups
+    .flat()
+    .filter(
+      (row) =>
+        row._id_obat &&
+        isFilled(row._nama_obat) &&
+        row._nama_obat.trim().toLowerCase().startsWith(normalizedInitial)
+    );
+
+  const details = await mapWithConcurrency(variants, REQUEST_CONCURRENCY, async (variant) => {
+    try {
+      const rows = await fetchOfficialApi<OfficialDrugDetailRow[]>({
+        type: "obatsks",
+        _id_obat: String(variant._id_obat),
+        _kekuatan: variant._kekuatan ?? "",
+        _kode_satuan: variant._kode_satuan ?? "",
+        _kode_sediaan: variant._kode_sediaan ?? ""
+      });
+
+      return rows[0] ?? null;
+    } catch {
+      return null;
+    }
+  });
+
+  const rows = variants.map((variant, index) => toFornasDrug(variant, details[index]));
+  const deduplicatedRows = sortFornasRows(Array.from(new Map(rows.map((row) => [row.id, row])).values()));
+  const result = await replaceFornasCatalog(deduplicatedRows, actor, `e-FORNAS (huruf ${normalizedInitial.toUpperCase()})`);
+
+  return {
+    ...result,
+    initial: normalizedInitial,
+    fetchedDrugs: uniqueDrugIds.length,
+    fetchedVariants: variants.length,
+    sourceUrl: OFFICIAL_FORNAS_PUBLIC_URL
+  };
+}
+
 export { OFFICIAL_FORNAS_PUBLIC_URL };

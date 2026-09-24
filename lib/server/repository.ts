@@ -237,20 +237,6 @@ async function readDocument<T>(collectionName: CollectionName, id: string) {
   }
 }
 
-async function writeDocument<T extends { id: string }>(collectionName: CollectionName, payload: T) {
-  const db = requireWritableDb(collectionName);
-  if (!db) {
-    return payload;
-  }
-
-  await db.collection(collectionName).doc(payload.id).set(payload);
-  invalidateCollectionCache(collectionName);
-  if (collectionName === "dashboard_summary") {
-    invalidateDashboardSummaryCache();
-  }
-  return payload;
-}
-
 function stripUndefinedFields<T extends Record<string, unknown>>(payload: T): T {
   const clean = { ...payload };
   (Object.keys(clean) as Array<keyof T>).forEach((key) => {
@@ -259,6 +245,24 @@ function stripUndefinedFields<T extends Record<string, unknown>>(payload: T): T 
     }
   });
   return clean;
+}
+
+async function writeDocument<T extends { id: string }>(collectionName: CollectionName, payload: T) {
+  const db = requireWritableDb(collectionName);
+  if (!db) {
+    return payload;
+  }
+
+  // Sama seperti writeDocuments: Firestore menolak field bernilai "undefined"
+  // (mis. coverageScheme kosong pada penerimaan/distribusi/dispense).
+  const sanitized = stripUndefinedFields(payload as unknown as Record<string, unknown>) as unknown as T;
+
+  await db.collection(collectionName).doc(sanitized.id).set(sanitized);
+  invalidateCollectionCache(collectionName);
+  if (collectionName === "dashboard_summary") {
+    invalidateDashboardSummaryCache();
+  }
+  return payload;
 }
 
 async function writeDocuments<T extends { id: string }>(collectionName: CollectionName, payloads: T[]) {
@@ -316,7 +320,10 @@ async function updateDocument<T extends { id: string }>(
     return { ...(current ?? ({ id } as T)), ...payload, id } as T;
   }
 
-  await db.collection(collectionName).doc(id).set(payload, { merge: true });
+  await db.collection(collectionName).doc(id).set(
+    stripUndefinedFields(payload as unknown as Record<string, unknown>),
+    { merge: true }
+  );
   invalidateCollectionCache(collectionName);
   if (collectionName === "dashboard_summary") {
     invalidateDashboardSummaryCache();
